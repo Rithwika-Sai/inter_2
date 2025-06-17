@@ -1,0 +1,173 @@
+import pandas as pd
+import numpy as np
+import re
+from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV
+from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
+from sklearn.linear_model import LogisticRegression # Example classifier for classification
+from sklearn.ensemble import RandomForestRegressor # Example regressor for regression
+from sklearn.metrics import classification_report, confusion_matrix, accuracy_score, mean_squared_error, r2_score
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.compose import ColumnTransformer
+
+# --- 1. Simulate Black Friday Sales Data ---
+# We'll use a classification problem as the primary example first (predicting High/Low sales)
+np.random.seed(42) # for reproducibility
+
+texts = [
+    "This smart TV is a must-buy for Black Friday! Incredible resolution and features.",
+    "Decent headphones, but the discount isn't very appealing for the holiday season.",
+    "Gaming console with huge price drop, expected to sell out fast.",
+    "Fashionable apparel, perfect for winter. Great Black Friday discount.",
+    "My old laptop is better than this. Very basic, not good for intense gaming.",
+    "Awesome deals on home appliances, especially refrigerators and washing machines.",
+    "Small kitchen gadget, good for a small gift, but not a major sale item.",
+    "Latest smartphone model, everyone is talking about the camera quality and sales.",
+    "Very high quality speakers, amazing sound. Limited stock, likely to be popular.",
+    "This product is overpriced even with the Black Friday offer. Disappointed.",
+    "Fantastic vacuum cleaner, highly recommended. Will definitely boost sales.",
+    "Not worth the hype. The Black Friday deals are just average on this item.",
+    "Super comfy shoes, great for everyday wear. Good discount.",
+    "Fitness tracker with a good battery life, but price is still a bit high.",
+    "Amazing drone with 4K camera. Black Friday is the time to buy this!",
+    "Basic tablet, good for kids, but don't expect too much performance.",
+    "Luxury watch, deep discount for Black Friday. Exclusive item.",
+    "Old model printer, probably won't sell much even with a price cut.",
+    "Innovative smart home device, great reviews, should sell well.",
+    "Charger broke after a week. Very bad quality. Avoid this brand during sales."
+]
+
+# Simulate sales performance labels (e.g., 'High_Sales', 'Low_Sales')
+sales_labels = ['High_Sales', 'Low_Sales', 'High_Sales', 'High_Sales', 'Low_Sales',
+                'High_Sales', 'Low_Sales', 'High_Sales', 'High_Sales', 'Low_Sales',
+                'High_Sales', 'Low_Sales', 'High_Sales', 'Low_Sales', 'High_Sales',
+                'Low_Sales', 'High_Sales', 'Low_Sales', 'High_Sales', 'Low_Sales']
+
+# Create a DataFrame
+df = pd.DataFrame({'text': texts, 'sales_category': sales_labels})
+
+print("--- Sample Data (First 5 Rows) ---")
+print(df.head())
+print("\n--- Distribution of Sales Categories ---")
+print(df['sales_category'].value_counts())
+
+# Separate features (X) and target (y)
+X = df['text']
+y = df['sales_category']
+
+# Split data into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42, stratify=y)
+
+print(f"\n--- Data Split Information ---")
+print(f"Training set size: {len(X_train)} samples")
+print(f"Test set size: {len(X_test)} samples")
+print(f"Training labels distribution:\n{y_train.value_counts()}")
+print(f"Test labels distribution:\n{y_test.value_counts()}")
+
+# --- 2. Building a Machine Learning Pipeline for Classification ---
+# This pipeline vectorizes the text and then applies a Logistic Regression model.
+text_clf_pipeline = Pipeline([
+    ('tfidf', TfidfVectorizer(stop_words='english', ngram_range=(1,2), max_features=1000, min_df=2)),
+    ('clf', LogisticRegression(solver='liblinear', random_state=42))
+])
+
+print("\n--- Starting Model Training (Classification) ---")
+# Train the model
+text_clf_pipeline.fit(X_train, y_train)
+print("Model training completed.")
+
+# --- 3. Model Evaluation (Classification) ---
+print("\n--- Evaluating Classification Model ---")
+y_pred_clf = text_clf_pipeline.predict(X_test)
+
+print(f"\nAccuracy Score: {accuracy_score(y_test, y_pred_clf):.4f}")
+print("\nConfusion Matrix:\n", confusion_matrix(y_test, y_pred_clf))
+print("\nClassification Report:\n", classification_report(y_test, y_pred_clf))
+
+# --- 4. Hyperparameter Tuning with GridSearchCV (Classification) ---
+print("\n--- Starting GridSearchCV for Hyperparameter Tuning (Classification) ---")
+parameters_clf = {
+    'tfidf__ngram_range': [(1, 1), (1, 2)], # Try unigrams only, and unigrams+bigrams
+    'tfidf__max_features': [500, 1000],    # Vary vocabulary size
+    'clf__C': [0.1, 1, 10]                   # Regularization strength for Logistic Regression
+}
+
+grid_search_clf = GridSearchCV(text_clf_pipeline, parameters_clf, cv=3, n_jobs=-1, verbose=1, scoring='accuracy')
+grid_search_clf.fit(X_train, y_train)
+
+print("\n--- GridSearchCV Results (Classification) ---")
+print(f"Best cross-validation accuracy: {grid_search_clf.best_score_:.4f}")
+print(f"Best parameters found: {grid_search_clf.best_params_}")
+
+# Evaluate the best model from GridSearchCV on the test set
+best_clf_model = grid_search_clf.best_estimator_
+y_pred_best_clf = best_clf_model.predict(X_test)
+print(f"\nAccuracy of Best Model on Test Set: {accuracy_score(y_test, y_pred_best_clf):.4f}")
+print("\nClassification Report of Best Model on Test Set:\n", classification_report(y_test, y_pred_best_clf))
+
+# --- 5. Example for a Regression Problem (Predicting a numerical sales amount) ---
+# Now, let's switch to predicting a continuous number (sales_amount)
+print("\n" + "="*80)
+print("--- Starting Regression Problem Example (Predicting Sales Amount) ---")
+print("="*80)
+
+# Simulate numerical sales data
+df_reg = pd.DataFrame({'text': texts, 'sales_amount': [1200, 350, 1500, 900, 200,
+                                                      1100, 400, 1300, 1450, 250,
+                                                      1600, 300, 850, 450, 1700,
+                                                      280, 1800, 150, 1000, 180]})
+
+print("\n--- Sample Regression Data (First 5 Rows) ---")
+print(df_reg.head())
+
+X_reg = df_reg['text']
+y_reg = df_reg['sales_amount']
+
+X_train_reg, X_test_reg, y_train_reg, y_test_reg = train_test_split(X_reg, y_reg, test_size=0.25, random_state=42)
+
+print(f"\nTraining set size (Regression): {len(X_train_reg)} samples")
+print(f"Test set size (Regression): {len(X_test_reg)} samples")
+
+# Pipeline for Regression
+text_reg_pipeline = Pipeline([
+    ('tfidf', TfidfVectorizer(stop_words='english', ngram_range=(1,2), max_features=1000, min_df=2)),
+    ('reg', RandomForestRegressor(n_estimators=100, random_state=42)) # Using RandomForestRegressor
+])
+
+print("\n--- Starting Model Training (Regression) ---")
+text_reg_pipeline.fit(X_train_reg, y_train_reg)
+print("Regression model training completed.")
+
+# --- 6. Evaluate Regression Model ---
+print("\n--- Evaluating Regression Model ---")
+y_pred_reg = text_reg_pipeline.predict(X_test_reg)
+
+print(f"Mean Squared Error (MSE): {mean_squared_error(y_test_reg, y_pred_reg):.2f}")
+print(f"R-squared (R2): {r2_score(y_test_reg, y_pred_reg):.4f}")
+
+# --- 7. Making Predictions on New Data ---
+print("\n" + "="*80)
+print("--- Making Predictions on New, Unseen Data ---")
+print("="*80)
+
+new_texts_for_prediction = pd.Series([
+    "This new projector is amazing, excellent clarity, will sell like hotcakes!",
+    "Basic toaster, no special Black Friday offer, probably won't move units.",
+    "High-end sound system, big discount for the sale, expecting massive interest."
+])
+
+print("\nNew Texts to Predict:")
+for i, text in enumerate(new_texts_for_prediction):
+    print(f"{i+1}. {text}")
+
+# Predict sales categories using the best classification model
+print("\n--- Predictions from Classification Model ---")
+predicted_categories = best_clf_model.predict(new_texts_for_prediction)
+for text, category in zip(new_texts_for_prediction, predicted_categories):
+    print(f"Text: '{text}' -> Predicted Sales Category: {category}")
+
+# Predict sales amounts using the regression model
+print("\n--- Predictions from Regression Model ---")
+predicted_amounts = text_reg_pipeline.predict(new_texts_for_prediction)
+for text, amount in zip(new_texts_for_prediction, predicted_amounts):
+    print(f"Text: '{text}' -> Predicted Sales Amount: {amount:.2f}")
